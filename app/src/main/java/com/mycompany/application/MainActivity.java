@@ -8,104 +8,196 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
-import android.provider.Settings;
 
 public class MainActivity extends Activity {
 
     public static WindowManager manager;
     public static WindowManager.LayoutParams vParams;
+
     @SuppressLint("StaticFieldLeak")
     public static View vTouch;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (!Settings.canDrawOverlays(this))
+            // Запускаем overlay только если разрешение уже выдано
+            if (Settings.canDrawOverlays(this)) {
                 Start(this);
+            }
+        } else {
+            Start(this);
         }
     }
 
     public static void Start(Context context) {
-        System.loadLibrary("MP");
-        manager = ((Activity) context).getWindowManager();
-        vParams = getAttributes(false);
-        WindowManager.LayoutParams wParams = getAttributes(true);
-        GLES3JNIView display = new GLES3JNIView(context);
-        vTouch = new View(context);
-        manager.addView(vTouch, vParams);
-        manager.addView(display, wParams);
+        try {
+            // Загружаем native-библиотеку
+            System.loadLibrary("MP");
 
-        vTouch.setOnTouchListener(new View.OnTouchListener() {
-            @SuppressLint("ClickableViewAccessibility")
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                int action = event.getAction();
-                switch (action) {
-                    case MotionEvent.ACTION_MOVE:
-                    case MotionEvent.ACTION_DOWN:
-                    case MotionEvent.ACTION_UP:
-                        GLES3JNIView.MotionEventClick(action != MotionEvent.ACTION_UP, event.getRawX(), event.getRawY());
-                        break;
-                    default:
-                        break;
+            Activity activity = (Activity) context;
+            manager = activity.getWindowManager();
+
+            vParams = getAttributes(false);
+            WindowManager.LayoutParams wParams = getAttributes(true);
+
+            GLES3JNIView display = new GLES3JNIView(context);
+
+            vTouch = new View(context);
+
+            manager.addView(vTouch, vParams);
+            manager.addView(display, wParams);
+
+            vTouch.setOnTouchListener(new View.OnTouchListener() {
+                @SuppressLint("ClickableViewAccessibility")
+                @Override
+                public boolean onTouch(View v, MotionEvent event) {
+
+                    int action = event.getAction();
+
+                    switch (action) {
+                        case MotionEvent.ACTION_DOWN:
+                        case MotionEvent.ACTION_MOVE:
+                        case MotionEvent.ACTION_UP:
+
+                            GLES3JNIView.MotionEventClick(
+                                    action != MotionEvent.ACTION_UP,
+                                    event.getRawX(),
+                                    event.getRawY()
+                            );
+                            break;
+                    }
+
+                    return false;
                 }
-                return false;
-            }
-        });
-        final Handler handler = new Handler(Looper.getMainLooper());
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    String[] rect = GLES3JNIView.getWindowRect().split("\\|");
-                    vParams.x = Integer.parseInt(rect[0]);
-                    vParams.y = Integer.parseInt(rect[1]);
-                    vParams.width = Integer.parseInt(rect[2]);
-                    vParams.height = Integer.parseInt(rect[3]);
-                    manager.updateViewLayout(vTouch, vParams);
-                } catch (Exception e) {
+            });
+
+            final Handler handler = new Handler(Looper.getMainLooper());
+
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+
+                    try {
+                        String[] rect =
+                                GLES3JNIView.getWindowRect().split("\\|");
+
+                        if (rect.length >= 4) {
+
+                            vParams.x = Integer.parseInt(rect[0]);
+                            vParams.y = Integer.parseInt(rect[1]);
+
+                            vParams.width =
+                                    Integer.parseInt(rect[2]);
+
+                            vParams.height =
+                                    Integer.parseInt(rect[3]);
+
+                            if (vTouch != null && vTouch.getParent() != null) {
+                                manager.updateViewLayout(
+                                        vTouch,
+                                        vParams
+                                );
+                            }
+                        }
+
+                    } catch (Exception ignored) {
+                    }
+
+                    handler.postDelayed(this, 20);
                 }
-                handler.postDelayed(this, 20);
-            }
-        }, 20);
+            }, 20);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     @SuppressLint({"RtlHardcoded", "ObsoleteSdkInt"})
     public static WindowManager.LayoutParams getAttributes(boolean isWindow) {
-        WindowManager.LayoutParams params = new WindowManager.LayoutParams();
-        int aditionalFlags = 0;
-        if (Build.VERSION.SDK_INT >= 21)
-            aditionalFlags = WindowManager.LayoutParams.FLAG_SPLIT_TOUCH;
-        if (Build.VERSION.SDK_INT >= 21)
-            aditionalFlags = aditionalFlags | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
-        params = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT | WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.WRAP_CONTENT | WindowManager.LayoutParams.MATCH_PARENT,
-                0,
-                0,
-                WindowManager.LayoutParams.TYPE_APPLICATION,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
-                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_OVERSCAN |
-                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN |
-                        WindowManager.LayoutParams.FLAG_SPLIT_TOUCH | aditionalFlags,
-                PixelFormat.TRANSPARENT);
+
+        int additionalFlags = 0;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            additionalFlags |=
+                    WindowManager.LayoutParams.FLAG_SPLIT_TOUCH;
+
+            additionalFlags |=
+                    WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
+        }
+
+        int windowType;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Android 8.0+
+            windowType =
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // Android 6.0 - 7.1
+            windowType =
+                    WindowManager.LayoutParams.TYPE_PHONE;
+        } else {
+            windowType =
+                    WindowManager.LayoutParams.TYPE_PHONE;
+        }
+
+        WindowManager.LayoutParams params =
+                new WindowManager.LayoutParams(
+                        WindowManager.LayoutParams.MATCH_PARENT,
+                        WindowManager.LayoutParams.MATCH_PARENT,
+
+                        windowType,
+
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_OVERSCAN
+                                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                                | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH
+                                | additionalFlags,
+
+                        PixelFormat.TRANSLUCENT
+                );
 
         if (isWindow) {
             params.flags |=
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
+
+            params.flags |=
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
         }
-        params.format = PixelFormat.RGBA_8888; // 设置图片格式，效果为背景透明
+
+        params.format = PixelFormat.RGBA_8888;
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            params.layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams
+                            .LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         }
-        params.gravity = Gravity.LEFT | Gravity.TOP; // 调整悬浮窗显示的停靠位置为左侧置顶
-        params.x = params.y = 0;
-        params.width = params.height = isWindow ? WindowManager.LayoutParams.MATCH_PARENT : 0;
+
+        params.gravity =
+                Gravity.LEFT | Gravity.TOP;
+
+        params.x = 0;
+        params.y = 0;
+
+        if (isWindow) {
+            params.width =
+                    WindowManager.LayoutParams.MATCH_PARENT;
+
+            params.height =
+                    WindowManager.LayoutParams.MATCH_PARENT;
+        } else {
+            // Размер touch-области первоначально 0x0.
+            // Далее он обновляется через getWindowRect().
+            params.width = 0;
+            params.height = 0;
+        }
+
         return params;
     }
 }
