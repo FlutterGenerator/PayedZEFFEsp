@@ -34,6 +34,7 @@ LOCAL_SRC_FILES := MPCheats.cpp \
     MPHook/Substrate/SubstrateDebug.cpp \
         MPHook/Substrate/SubstrateHook.cpp \
         MPHook/Substrate/SubstratePosixMemory.cpp \
+MPHook/Substrate/hde64.c \
     MPHook/KittyMemory/KittyMemory.cpp \
     MPHook/KittyMemory/MemoryPatch.cpp \
     MPHook/KittyMemory/MemoryBackup.cpp \
