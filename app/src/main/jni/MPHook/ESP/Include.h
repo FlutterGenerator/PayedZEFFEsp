@@ -1,6 +1,4 @@
 #include "Draw.h"
 #include "Struc.h"
-#include "Vector2.h"
 #include "Vector3.h"
 #include "Player.h"
-#include "Worldtoscren.h"
