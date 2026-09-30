@@ -6,7 +6,7 @@ namespace Settings {static int Tab = 1;}
 #include "MPHook/Includes/msg.h"
 #include "MPHook/Includes/classes.h"
 #include "MPHook/KittyMemory/obfuscate.h"
-#include "MPHook/ESP/include.h"
+#include "MPHook/ESP/Include.h"
 #include "MPHook/Includes/monostring.h"
 #include "ImGui/imgui_internal.h"
 #include "ImGui/imgui.h"
