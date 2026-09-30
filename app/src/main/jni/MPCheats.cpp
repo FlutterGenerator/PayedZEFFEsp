@@ -18,7 +18,7 @@ namespace Settings {static int Tab = 1;}
 #include <sys/system_properties.h>
 #include "ImGui/FONTS/DEFAULT.h"
 #include <MPHook/Includes/Utils.h>
-#include <MPHook/Includes/Dobby/dobby.h>
+#include <Includes/dobby.h>
 bool g_Initialized = false;
 ImGuiWindow* g_window = NULL;
 #include <MPHook/Substrate/SubstrateHook.h>
