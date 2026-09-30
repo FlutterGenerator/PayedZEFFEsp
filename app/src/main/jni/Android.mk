@@ -1,8 +1,7 @@
 LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
-LOCAL_MODULE := libdobby
-LOCAL_SRC_FILES := $(LOCAL_PATH)/libraries/$(TARGET_ARCH_ABI)/libdobby.a
+LOCAL_MODULE := dobby
 LOCAL_SRC_FILES := libraries/$(TARGET_ARCH_ABI)/libdobby.a
 include $(PREBUILT_STATIC_LIBRARY)
 
@@ -24,23 +23,23 @@ LOCAL_C_INCLUDES += $(LOCAL_PATH)
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/Includes
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/ImGui
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/ImGui/backends
-LOCAL_STATIC_LIBRARIES := libdobby
+LOCAL_STATIC_LIBRARIES := dobby
 
 # Here you add the cpp file to compile
 LOCAL_SRC_FILES := MPCheats.cpp \
-	ImGui/imgui.cpp \
+        ImGui/imgui.cpp \
     ImGui/imgui_draw.cpp \
     ImGui/imgui_widgets.cpp \
     ImGui/imgui_tables.cpp \
     ImGui/backends/imgui_impl_opengl3.cpp \
     ImGui/backends/imgui_impl_android.cpp \
     MPHook/Substrate/SubstrateDebug.cpp \
-	MPHook/Substrate/SubstrateHook.cpp \
-	MPHook/Substrate/SubstratePosixMemory.cpp \
+        MPHook/Substrate/SubstrateHook.cpp \
+        MPHook/Substrate/SubstratePosixMemory.cpp \
     MPHook/KittyMemory/KittyMemory.cpp \
     MPHook/KittyMemory/MemoryPatch.cpp \
     MPHook/KittyMemory/MemoryBackup.cpp \
     MPHook/KittyMemory/KittyUtils.cpp \
     MPHook/And64InlineHook/And64InlineHook.cpp \
-    
+
 include $(BUILD_SHARED_LIBRARY)
