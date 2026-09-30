@@ -3,7 +3,7 @@
 
 void ShowKeyboardJNI(JNIEnv* env, jobject activity);
 
-#include "imgui_mod.h"
+#include "Imgui_mod.h"
 #include "imgui.h"
 
 void ShowKeyboardJNI(JNIEnv* env, jobject activity) {
