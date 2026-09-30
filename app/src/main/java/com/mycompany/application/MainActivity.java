@@ -31,7 +31,7 @@ public class MainActivity extends Activity {
     }
 
     public static void Start(Context context) {
-        System.loadLibrary("ReverseSigma");
+        System.loadLibrary("MP");
         manager = ((Activity) context).getWindowManager();
         vParams = getAttributes(false);
         WindowManager.LayoutParams wParams = getAttributes(true);
