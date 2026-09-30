@@ -2,7 +2,6 @@ namespace Settings {static int Tab = 1;}
 #include "MPHook/includes.h"
 #include "MPHook/KittyMemory/MemoryPatch.h"
 #include "MPHook/And64InlineHook/And64InlineHook.hpp"
-#include "MPHook/Esp/Vector3.h"
 #include "MPHook/Includes/msg.h"
 #include "MPHook/Includes/classes.h"
 #include "MPHook/KittyMemory/obfuscate.h"
