@@ -1,203 +1,237 @@
 package com.mycompany.application;
 
 import android.annotation.SuppressLint;
-import android.app.Activity;
 import android.content.Context;
 import android.graphics.PixelFormat;
+import android.opengl.GLSurfaceView;
 import android.os.Build;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 
-public class MainActivity extends Activity {
+import javax.microedition.khronos.egl.EGLConfig;
+import javax.microedition.khronos.opengles.GL10;
+
+public class MainActivity {
+
+    private static final String TAG = "UE4_Overlay";
 
     public static WindowManager manager;
     public static WindowManager.LayoutParams vParams;
-
-    @SuppressLint("StaticFieldLeak")
     public static View vTouch;
+    public static GLES3JNIView display;
+    
+    private static Handler handler;
+    private static Runnable updateRunnable;
+    private static boolean isLibraryLoaded = false;
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            // Запускаем overlay только если разрешение уже выдано
-            if (Settings.canDrawOverlays(this)) {
-                Start(this);
-            }
-        } else {
-            Start(this);
+    // 1. Безопасная подгрузка C++ библиотеки libMP.so
+    static {
+        try {
+            System.loadLibrary("MP");
+            isLibraryLoaded = true;
+            Log.d(TAG, "libMP.so успешно загружена");
+        } catch (UnsatisfiedLinkError e) {
+            Log.e(TAG, "Ошибка загрузки libMP.so: " + e.getMessage());
         }
     }
 
-    public static void Start(Context context) {
-        try {
-            // Загружаем native-библиотеку
-            System.loadLibrary("MP");
+    // 2. Главный метод запуска оверлея
+    public static void Start(final Context context) {
+        if (context == null) return;
 
-            Activity activity = (Activity) context;
-            manager = activity.getWindowManager();
+        // Проверка разрешения на оверлей для Android 6.0+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!Settings.canDrawOverlays(context)) {
+                Log.e(TAG, "Разрешение SYSTEM_ALERT_WINDOW не предоставлено!");
+                return;
+            }
+        }
+
+        try {
+            // Безопасное получение WindowManager без приведения к Activity
+            manager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+            if (manager == null) return;
 
             vParams = getAttributes(false);
             WindowManager.LayoutParams wParams = getAttributes(true);
 
-            GLES3JNIView display = new GLES3JNIView(context);
-
+            display = new GLES3JNIView(context);
             vTouch = new View(context);
 
+            // Добавляем View в оверлей
             manager.addView(vTouch, vParams);
             manager.addView(display, wParams);
 
+            // Обработка касаний
             vTouch.setOnTouchListener(new View.OnTouchListener() {
                 @SuppressLint("ClickableViewAccessibility")
                 @Override
                 public boolean onTouch(View v, MotionEvent event) {
-
                     int action = event.getAction();
+                    if (action == MotionEvent.ACTION_DOWN || 
+                        action == MotionEvent.ACTION_MOVE || 
+                        action == MotionEvent.ACTION_UP) {
 
-                    switch (action) {
-                        case MotionEvent.ACTION_DOWN:
-                        case MotionEvent.ACTION_MOVE:
-                        case MotionEvent.ACTION_UP:
-
-                            GLES3JNIView.MotionEventClick(
-                                    action != MotionEvent.ACTION_UP,
-                                    event.getRawX(),
-                                    event.getRawY()
-                            );
-                            break;
+                        if (isLibraryLoaded) {
+                            try {
+                                GLES3JNIView.MotionEventClick(
+                                        action != MotionEvent.ACTION_UP,
+                                        event.getRawX(),
+                                        event.getRawY()
+                                );
+                            } catch (Exception ignored) {}
+                        }
                     }
-
                     return false;
                 }
             });
 
-            final Handler handler = new Handler(Looper.getMainLooper());
-
-            handler.postDelayed(new Runnable() {
+            // Поток для динамического изменения размеров поля ввода/касания
+            handler = new Handler(Looper.getMainLooper());
+            updateRunnable = new Runnable() {
                 @Override
                 public void run() {
-
                     try {
-                        String[] rect =
-                                GLES3JNIView.getWindowRect().split("\\|");
+                        if (isLibraryLoaded) {
+                            String rectStr = GLES3JNIView.getWindowRect();
+                            if (rectStr != null && !rectStr.isEmpty()) {
+                                String[] rect = rectStr.split("\\|");
+                                if (rect.length >= 4) {
+                                    vParams.x = Integer.parseInt(rect[0]);
+                                    vParams.y = Integer.parseInt(rect[1]);
+                                    vParams.width = Integer.parseInt(rect[2]);
+                                    vParams.height = Integer.parseInt(rect[3]);
 
-                        if (rect.length >= 4) {
-
-                            vParams.x = Integer.parseInt(rect[0]);
-                            vParams.y = Integer.parseInt(rect[1]);
-
-                            vParams.width =
-                                    Integer.parseInt(rect[2]);
-
-                            vParams.height =
-                                    Integer.parseInt(rect[3]);
-
-                            if (vTouch != null && vTouch.getParent() != null) {
-                                manager.updateViewLayout(
-                                        vTouch,
-                                        vParams
-                                );
+                                    if (vTouch != null && vTouch.getParent() != null) {
+                                        manager.updateViewLayout(vTouch, vParams);
+                                    }
+                                }
                             }
                         }
+                    } catch (Exception ignored) {}
 
-                    } catch (Exception ignored) {
+                    if (handler != null) {
+                        handler.postDelayed(this, 20);
                     }
-
-                    handler.postDelayed(this, 20);
                 }
-            }, 20);
+            };
+
+            handler.postDelayed(updateRunnable, 20);
 
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e(TAG, "Ошибка при запуске оверлея: " + e.getMessage());
         }
     }
 
+    // 3. Параметры окон WindowManager
     @SuppressLint({"RtlHardcoded", "ObsoleteSdkInt"})
     public static WindowManager.LayoutParams getAttributes(boolean isWindow) {
-
         int additionalFlags = 0;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            additionalFlags |=
-                    WindowManager.LayoutParams.FLAG_SPLIT_TOUCH;
-
-            additionalFlags |=
-                    WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
+            additionalFlags |= WindowManager.LayoutParams.FLAG_SPLIT_TOUCH;
+            additionalFlags |= WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
         }
 
         int windowType;
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // Android 8.0+
-            windowType =
-                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            // Android 6.0 - 7.1
-            windowType =
-                    WindowManager.LayoutParams.TYPE_PHONE;
+            windowType = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         } else {
-            windowType =
-                    WindowManager.LayoutParams.TYPE_PHONE;
+            windowType = WindowManager.LayoutParams.TYPE_PHONE;
         }
 
-        WindowManager.LayoutParams params =
-                new WindowManager.LayoutParams(
-                        WindowManager.LayoutParams.MATCH_PARENT,
-                        WindowManager.LayoutParams.MATCH_PARENT,
-
-                        windowType,
-
-                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_OVERSCAN
-                                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                                | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH
-                                | additionalFlags,
-
-                        PixelFormat.TRANSLUCENT
-                );
+        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                windowType,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_OVERSCAN
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH
+                        | additionalFlags,
+                PixelFormat.TRANSLUCENT
+        );
 
         if (isWindow) {
-            params.flags |=
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
-
-            params.flags |=
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+            params.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
+            params.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
         }
 
         params.format = PixelFormat.RGBA_8888;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             params.layoutInDisplayCutoutMode =
-                    WindowManager.LayoutParams
-                            .LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         }
 
-        params.gravity =
-                Gravity.LEFT | Gravity.TOP;
-
+        params.gravity = Gravity.LEFT | Gravity.TOP;
         params.x = 0;
         params.y = 0;
 
         if (isWindow) {
-            params.width =
-                    WindowManager.LayoutParams.MATCH_PARENT;
-
-            params.height =
-                    WindowManager.LayoutParams.MATCH_PARENT;
+            params.width = WindowManager.LayoutParams.MATCH_PARENT;
+            params.height = WindowManager.LayoutParams.MATCH_PARENT;
         } else {
-            // Размер touch-области первоначально 0x0.
-            // Далее он обновляется через getWindowRect().
             params.width = 0;
             params.height = 0;
         }
 
         return params;
+    }
+
+    // 4. Вложенный OpenGL-View класс
+    public static class GLES3JNIView extends GLSurfaceView implements GLSurfaceView.Renderer {
+
+        public GLES3JNIView(Context context) {
+            super(context);
+            setEGLConfigChooser(8, 8, 8, 8, 16, 0);
+            getHolder().setFormat(PixelFormat.TRANSLUCENT);
+            setEGLContextClientVersion(3);
+            setRenderer(this);
+            setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
+        }
+
+        @Override
+        public void onSurfaceCreated(GL10 gl, EGLConfig config) {
+            if (isLibraryLoaded) {
+                try { init(); } catch (Exception ignored) {}
+            }
+        }
+
+        @Override
+        public void onSurfaceChanged(GL10 gl, int width, int height) {
+            if (isLibraryLoaded) {
+                try { resize(width, height); } catch (Exception ignored) {}
+            }
+        }
+
+        @Override
+        public void onDrawFrame(GL10 gl) {
+            if (isLibraryLoaded) {
+                try { step(); } catch (Exception ignored) {}
+            }
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            if (isLibraryLoaded) {
+                try { imgui_Shutdown(); } catch (Exception ignored) {}
+            }
+            super.onDetachedFromWindow();
+        }
+
+        // Native методы C++
+        public static native void init();
+        public static native void resize(int width, int height);
+        public static native void step();
+        public static native void imgui_Shutdown();
+        public static native void MotionEventClick(boolean down, float PosX, float PosY);
+        public static native String getWindowRect();
     }
 }
